@@ -1,13 +1,13 @@
 package org.emaginalabs.sample.jwt;
 
-import org.emaginalabs.security.jwt.config.JwtConfiguration;
+import org.emaginalabs.security.jwt.EnableJwtSecurity;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Import;
 import springfox.documentation.swagger2.annotations.EnableSwagger2;
 
 @SpringBootApplication
-@Import(JwtConfiguration.class)
+@EnableJwtSecurity
+//@Import(JwtConfiguration.class)
 @EnableSwagger2
 public class SampleJwtApplication {
 

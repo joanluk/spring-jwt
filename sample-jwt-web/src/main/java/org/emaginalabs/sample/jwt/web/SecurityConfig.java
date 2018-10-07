@@ -15,7 +15,6 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
-//@EnableWebSecurity
 @Slf4j
 public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
@@ -36,7 +35,8 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .cors()
                 .and()
                 .csrf().disable()
-                .authorizeRequests().anyRequest().authenticated();
+                .authorizeRequests().antMatchers("/api/**").authenticated()
+                .anyRequest().permitAll();
         jwtConfigurer.configure(httpSecurity);
 
     }
