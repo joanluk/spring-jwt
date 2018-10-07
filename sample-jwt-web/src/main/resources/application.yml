@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: spring-jwt-example
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+      base-path: /api/actuator
+  endpoint:
+    beans:
+      enabled: true
+    auditevents:
+      enabled: true
+    shutdown:
+      enabled: true
+
+
+app:
+  security:
+    jwt:
+      token:
+        expiration:
+          time: 15
+        issuer: user
+        sign:
+          key: ThisIsASecret
+        refresh:
+          time: 16
+        compresion: false
+        response: "header,payload"
+      path:
+        login: "/api/auth/login"
+        secure: "/**"
+      paths:
+        allow: "/api/auth/refresh"
+      signature:
+        algorithm: "ES512"
+logging:
+  level:
+    root: info
