@@ -3,4 +3,33 @@ image:https://travis-ci.org/joanluk/spring-jwt.svg?branch=master["Build Status",
 
 = Ejemplo API REST con seguridad basada en token JWT
 
-....
+
+Este ejemplo pretende probar cómo se puede securizar un API REST con JWT.
+
+
+== Stack tecnológico
+
+- Java 8
+- Spring Boot 2
+- Spring Security
+- Librería _io.jsonwebtoken:jjwt_
+
+
+== Algoritmos de firma utilizados
+
+Para el ejemplo se han utilizado algoritmos tanto simétricos como asímetricos. En cocnreto, los siguientes algorimos:
+
+
+=== Simétricos
+
+- HMAC usando SHA-512 (H512)
+
+=== Asimétricos
+
+- RSASSA-PKCS-v1_5 usnado SHA-512 (RS512)
+- ECDSA usando P-512 and SHA-512  (ES512)
+
+Aunque realmente se podrían ampliar para permitir cualquier tipo de algoritmo con poco esfuerzo. El hecho de haber seleccionado estos es debido
+a que son los más utilziados.
+
+
