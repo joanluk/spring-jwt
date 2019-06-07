@@ -1,8 +1,12 @@
 package org.emaginalabs.security.jwt.token.provider;
 
-import io.jsonwebtoken.*;
-import io.jsonwebtoken.SignatureException;
-import io.jsonwebtoken.impl.compression.DefaultCompressionCodecResolver;
+
+import com.nimbusds.jose.*;
+import com.nimbusds.jose.crypto.*;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+import com.nimbusds.jwt.proc.BadJWTException;
+import com.nimbusds.jwt.proc.DefaultJWTClaimsVerifier;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -10,27 +14,30 @@ import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.jce.spec.ECParameterSpec;
+import org.emaginalabs.security.jwt.claims.JwtMap;
 import org.emaginalabs.security.jwt.config.JwtSettings;
-import org.emaginalabs.security.jwt.exceptions.JwtExpiredTokenException;
+import org.emaginalabs.security.jwt.exceptions.InvalidJWTException;
 import org.emaginalabs.security.jwt.token.model.AccessJwtToken;
 import org.emaginalabs.security.jwt.token.model.JwtToken;
 import org.joda.time.LocalDateTime;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.util.Assert;
 
 import javax.annotation.PostConstruct;
 import java.io.InputStream;
 import java.security.*;
 import java.security.cert.Certificate;
+import java.security.interfaces.RSAPublicKey;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import java.util.Map;
 
 /**
  * Class that manipulates with Json Web Tokens
@@ -42,80 +49,118 @@ import java.util.UUID;
 public class JwtTokenProvider implements TokenProvider {
 
     public static final String TOKEN_PREFIX = "Bearer";            // the prefix of the token in the http header
-    public static final String AUTHENTICATION_HEADER_NAME = "Authorization";    // the http header containing the prexif + the token
+    public static final String AUTHENTICATION_HEADER_NAME = "Authorization";    // the http header containing the prefix + the token
     private static final String ROLE_CLAIMS = "authorities";
 
-    @Value("${app.env.name:unknow-application}")
+    @Value("${spring.application.name:unknow-application}")
     private String appName;
 
     private final JwtSettings settings;
 
     @Autowired(required = false)
-    private Claims customClaims;
+    private JwtMap customClaims;
 
-    private KeyHolder keyHolder;
+    private KeyHolder keyHolderSignature;
+
+    private KeyHolder keyHolderEncryption;
 
     /**
-     * Creates token based on authentication details
+     * Creates token based on authentication detxails
      *
      * @param authentication Authentication
      * @return The generated token.
      */
     @SuppressWarnings("unchecked")
+    @Override
     public JwtToken createToken(final Authentication authentication) {
         Assert.hasText(authentication.getName(), "Cannot create JWT Token without username");
 
         //TODO ver si se define clase encargada de dar la fecha
         LocalDateTime currentTime = LocalDateTime.now();
 
-        Claims claims = Jwts.claims().setSubject(authentication.getName());
-        claims.put(ROLE_CLAIMS, getAuthoritiesStr((List<GrantedAuthority>) authentication.getAuthorities()));
+        JWTClaimsSet.Builder jwtClaimsSet = new JWTClaimsSet.Builder()
+                .issuer(appName)
+                .subject(authentication.getName())
+                .issueTime(currentTime.toDate())
+                .expirationTime(currentTime.plusMinutes(settings.getRefreshTokenExpTime()).toDate())
+                .claim(ROLE_CLAIMS, getAuthoritiesStr((List<GrantedAuthority>) authentication.getAuthorities()))
+                .claim("custom-claims", "test");
 
-        JwtBuilder jwtBuilder = Jwts.builder()
-                .setId(UUID.randomUUID().toString())
-                .setAudience(appName)
-                .setSubject(authentication.getName())
-                .setIssuedAt(currentTime.toDate())
-                .setExpiration(currentTime.plusMinutes(settings.getRefreshTokenExpTime()).toDate());
-
-        if (keyHolder.getSecret() != null) {
-            jwtBuilder = jwtBuilder.signWith(settings.getSignatureAlgorithm(), keyHolder.getSecret());
-        } else {
-            jwtBuilder = jwtBuilder.signWith(settings.getSignatureAlgorithm(), keyHolder.getPrivateKey());
-        }
-
-        jwtBuilder.claim(ROLE_CLAIMS, getAuthoritiesStr((List<GrantedAuthority>) authentication.getAuthorities()));
-        /* compression */
-        if (settings.isCompresion()) {
-            jwtBuilder.compressWith(CompressionCodecs.DEFLATE);
-        }
-        //custom claims
         if (customClaims != null) {
             log.debug("including custom claims defined by the bean {0}", customClaims.getClass().getName());
-            jwtBuilder.addClaims(customClaims);
+            for (Map.Entry<String, Object> entry : customClaims.entrySet()) {
+                jwtClaimsSet.claim(entry.getKey(), entry.getValue());
+            }
 
         }
-        String token = jwtBuilder.compact();
-        log.debug("Access token created: {)", token);
-        return new AccessJwtToken(token, claims);
+        SignedJWT signedJWT = new SignedJWT(new JWSHeader(settings.getSignatureAlgorithm()), jwtClaimsSet.build());
+        try {
+            //Determinate signed algorithm
+            JWSSigner signer = keyHolderSignature.getSecret() != null ? new MACSigner(keyHolderSignature.getSecret()) : new RSASSASigner(keyHolderSignature.getPrivateKey());
+            //Determinate encryption algorithm
+            JWEEncrypter jweEncrypter = keyHolderEncryption.getSecret() != null ? new DirectEncrypter(keyHolderEncryption.getSecret()) : (new RSAEncrypter((RSAPublicKey) keyHolderEncryption.getPublicKey()));
+            //sign
+            signedJWT.sign(signer);
+            String token;
+            //custom claims
+            if (!settings.isEncryptation()) {
+                token = signedJWT.serialize();
+            } else {
+                JWEObject jweObject = new JWEObject(
+                        new JWEHeader.Builder(JWEAlgorithm.RSA_OAEP_256, EncryptionMethod.A128GCM)
+                                .contentType("JWT") // required to indicate nested JWT
+                                .build(),
+                        new Payload(signedJWT));
+
+                jweObject.encrypt(jweEncrypter);
+
+
+                // Serialise to JWE compact form
+                token = jweObject.serialize();
+            }
+            log.debug("Access token created: {)", token);
+            return new AccessJwtToken(token, signedJWT.getJWTClaimsSet());
+        } catch (Exception e) {
+            log.error("Error creating token", e);
+            throw new InvalidJWTException(e.getMessage(), e);
+        }
 
     }
 
 
-    public Jws<Claims> validateToken(String token) {
+    public SignedJWT validateToken(String token) {
         try {
-            if (keyHolder.getSecret() != null) {
-                return Jwts.parser().setSigningKey(settings.getTokenSigningKey()).parseClaimsJws(
-                        token.replace(TOKEN_PREFIX, ""));
+            SignedJWT signedJWT;
+            if (settings.isEncryptation()) {
+                JWEObject jweObject = JWEObject.parse(token.replace(TOKEN_PREFIX, ""));
+                // Decrypt with private key
+                jweObject.decrypt(new RSADecrypter(keyHolderEncryption.getPrivateKey()));
+
+                // Extract payload
+                signedJWT = jweObject.getPayload().toSignedJWT();
 
             } else {
-                return Jwts.parser().setSigningKey(keyHolder.publicKey).parseClaimsJws(
-                        token.replace(TOKEN_PREFIX, ""));
-
+                signedJWT = SignedJWT.parse(token.replace(TOKEN_PREFIX, ""));
             }
+
+            if (settings.isValidateSigned()) {
+                JWSVerifier verifier = keyHolderSignature.getSecret() != null ? new MACVerifier(settings.getTokenSigningKey()) :
+                        new RSASSAVerifier((RSAPublicKey) keyHolderSignature.getPublicKey());
+                if (signedJWT.verify(verifier)) {
+                    DefaultJWTClaimsVerifier jwtClaimsVerifier = new DefaultJWTClaimsVerifier();
+                    jwtClaimsVerifier.verify(signedJWT.getJWTClaimsSet());
+                    return signedJWT;
+                }
+            }
+            return signedJWT;
+
+        } catch (BadJWTException badJWTException) {
+            log.error(badJWTException.getMessage(), badJWTException);
+            throw new InvalidJWTException(badJWTException.getMessage(), badJWTException);
         } catch (Exception ex) {
-            log.error("Invalid JWT Token", ex);
-            return null;
+            log.error("Invalid JWT Token: " + ex.getMessage(), ex);
+            throw new InvalidJWTException("Invalid jwt token: :" + ex.getMessage(), ex);
+
         }
     }
 
@@ -129,16 +174,31 @@ public class JwtTokenProvider implements TokenProvider {
     public Authentication getAuthentication(String token) {
 
         if (token != null && token.startsWith(JwtTokenProvider.TOKEN_PREFIX)) {
-            Jws<Claims> claims = validateToken(token);
-            String user = parseUsername(claims);
-            List<GrantedAuthority> authorities = parseRoles(claims);
-            //TODO si se han incluido algunos otros claims no se setean en el objeto de seguridad
-            if (user != null) {
-                return new UsernamePasswordAuthenticationToken(user, null, authorities);
+            SignedJWT signedJWT = validateToken(token);
+            try {
+                String user = parseUsername(signedJWT.getJWTClaimsSet());
+                List<GrantedAuthority> authorities = parseRoles(signedJWT.getJWTClaimsSet());
+                UserDetails userDetails = createUser2Token(signedJWT.getJWTClaimsSet());
+
+                //TODO si se han incluido algunos otros claims no se setean en el objeto de seguridad
+                if (user != null) {
+                    return new UsernamePasswordAuthenticationToken(userDetails, null, authorities);
+                }
+            } catch (ParseException ex) {
+                log.error("Error to parse token", ex);
             }
         }
 
         return null;
+    }
+
+    private UserDetails createUser2Token(JWTClaimsSet jwtClaimsSet) {
+
+        JwtUserDetailsImpl.Essence user = new JwtUserDetailsImpl.Essence();
+        user.setAuthorities(parseRoles(jwtClaimsSet));
+        user.setUsername(parseUsername(jwtClaimsSet));
+        user.setClaims(jwtClaimsSet.getClaims());
+        return user.createUserDetails();
     }
 
     /**
@@ -147,21 +207,20 @@ public class JwtTokenProvider implements TokenProvider {
      * @param claims claims jwt.
      * @return The subject (username) of the token.
      */
-    public String parseUsername(Jws<Claims> claims) {
+    public String parseUsername(JWTClaimsSet claims) {
 
         return claims
-                .getBody()
                 .getSubject();
 
     }
 
+
     @SuppressWarnings("unchecked")
-    public List<GrantedAuthority> parseRoles(Jws<Claims> claims) {
+    public List<GrantedAuthority> parseRoles(JWTClaimsSet claims) {
 
         List<GrantedAuthority> authorities = new ArrayList<GrantedAuthority>();
         List<String> roles = (List<String>) claims
-                .getBody()
-                .get(ROLE_CLAIMS);
+                .getClaim((ROLE_CLAIMS));
 
         for (String role : roles) {
             authorities.add(new SimpleGrantedAuthority(role));
@@ -177,49 +236,19 @@ public class JwtTokenProvider implements TokenProvider {
         return authoritiesStr;
     }
 
-    /**
-     * Return claims body
-     *
-     * @param claims claims jwt
-     * @return Content body
-     */
-    public Claims parseBody(final Jws<Claims> claims) {
-        return claims
-                .getBody();
-    }
 
-    public JwsHeader getHeader(final Jws<Claims> claims) {
-        return claims
-                .getHeader();
-    }
+    public JWTClaimsSet getJwtClaims(final String token) {
 
-
-    public Jws<Claims> getJwtClaims(final String token) {
-
-        JwtParser jwtParser = Jwts.parser()
-                .setSigningKey(settings.getTokenSigningKey());
-        if (settings.isCompresion()) {
-            jwtParser.setCompressionCodecResolver(new DefaultCompressionCodecResolver());
-        }
+        SignedJWT jwtParser = null;
         try {
-            return jwtParser.parseClaimsJws(token.replace(TOKEN_PREFIX, ""));
-        } catch (UnsupportedJwtException ex) {
-            log.error("Invalid JWT Token", ex);
-            throw new BadCredentialsException("Invalid JWT token. ", ex);
-        } catch (MalformedJwtException ex) {
-            log.error("Invalid JWT Token", ex);
-            throw new BadCredentialsException("Invalid JWT token. ", ex);
-        } catch (IllegalArgumentException ex) {
-            log.error("Invalid JWT Token", ex);
-            throw new BadCredentialsException("Invalid JWT token. ", ex);
-        } catch (SignatureException ex) {
-            log.error("Invalid JWT Token", ex);
-            throw new BadCredentialsException("Invalid JWT token. ", ex);
-        } catch (ExpiredJwtException expiredEx) {
-            log.info("JWT Token is expired", expiredEx);
-            throw new JwtExpiredTokenException(token, "JWT Token expired.", expiredEx);
+            jwtParser = SignedJWT.parse(token);
+            return jwtParser.getJWTClaimsSet();
+
+        } catch (ParseException e) {
+            log.error("Invalid token", e);
         }
 
+        return null;
     }
 
     /**
@@ -231,33 +260,51 @@ public class JwtTokenProvider implements TokenProvider {
      */
     public Object parseCustomClaim(final String token, final String claim) {
         return getJwtClaims(token)
-                .getBody()
-                .get(claim);
+                .getClaim(claim);
     }
 
 
     @PostConstruct
     public void setKeyStore() {
-        if (settings.getSignatureAlgorithm().isHmac()) {
-            keyHolder = new KeyHolder(settings.getTokenSigningKey().getBytes(), null, null);
-        } else if (settings.getSignatureAlgorithm().isRsa()) {
-            KeyPair rsaKey = readKeyRSA();
-            keyHolder = new KeyHolder(null, rsaKey.getPublic(), rsaKey.getPrivate());
-        } else if (settings.getSignatureAlgorithm().isEllipticCurve()) {
-            KeyPair ecKey = readKeyEC();
-            keyHolder = new KeyHolder(null, ecKey.getPublic(), ecKey.getPrivate());
+        log.info("JWT security with next configuration: " +
+                        "Signature algorithm: {}, " +
+                        "active encryption : {} with encryption algorithm : {} " +
+                        "token response:  [{}], token expiration time (min) : {}, url login path : {}, secure path : {} ",
+                settings.getSignatureAlgorithmStr(), settings.isEncryptation(), settings.getEncryptationAlgorithmStr(),
+                settings.getTokenResponse(), settings.getTokenExpirationTime(), settings.getLoginPath(), settings.getSecurePath());
+        loadKeyStoreSignature();
+        loadKeyStoreEncryptation();
+
+    }
+
+    private void loadKeyStoreSignature() {
+        if (settings.getSignatureAlgorithm().getName().startsWith("HS")) {
+            keyHolderSignature = new KeyHolder(settings.getTokenSigningKey().getBytes(), null, null);
+        } else if (settings.getSignatureAlgorithm().getName().startsWith("RS")) {
+            KeyPair rsaKey = readKeyRSA("sample-jws.p12", "changeit", "sample-jws");
+            keyHolderSignature = new KeyHolder(null, rsaKey.getPublic(), rsaKey.getPrivate());
+        } else if (settings.getSignatureAlgorithm().getName().startsWith("ES")) {
+            KeyPair ecKey = readJWSKeyEC();
+            keyHolderSignature = new KeyHolder(null, ecKey.getPublic(), ecKey.getPrivate());
         }
     }
 
+    private void loadKeyStoreEncryptation() {
+        if (settings.getEncryptationAlgorithm().getName().startsWith("AES")) {
+            keyHolderEncryption = new KeyHolder(settings.getTokenSigningKey().getBytes(), null, null);
+        } else if (settings.getEncryptationAlgorithm().getName().startsWith("RS")) {
+            KeyPair rsaKey = readKeyRSA("sample-jwe.p12", "changeit", "sample-jwe");
+            keyHolderEncryption = new KeyHolder(null, rsaKey.getPublic(), rsaKey.getPrivate());
+        }
+    }
 
-    private KeyPair readKeyRSA() {
+    private KeyPair readKeyRSA(String nameCertificate, String pass, String alias) {
         try {
             ClassLoader cl = Thread.currentThread().getContextClassLoader();
-            InputStream in = cl.getResourceAsStream("sample-jwt.p12");
+            InputStream in = cl.getResourceAsStream(nameCertificate);
             KeyStore keystore = KeyStore.getInstance("pkcs12");
-            keystore.load(in, "changeit".toCharArray());
-            String alias = "sample-jwt";
-            Key key = keystore.getKey(alias, "changeit".toCharArray());
+            keystore.load(in, pass.toCharArray());
+            Key key = keystore.getKey(alias, pass.toCharArray());
             Certificate certificate = keystore.getCertificate(alias);
             return new KeyPair(certificate.getPublicKey(), (PrivateKey) key);
         } catch (Exception ex) {
@@ -265,7 +312,7 @@ public class JwtTokenProvider implements TokenProvider {
         }
     }
 
-    private KeyPair readKeyEC() {
+    private KeyPair readJWSKeyEC() {
         try {
             Security.addProvider(new BouncyCastleProvider());
             ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("prime192v1");

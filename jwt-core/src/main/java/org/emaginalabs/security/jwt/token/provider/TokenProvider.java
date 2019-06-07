@@ -1,7 +1,7 @@
 package org.emaginalabs.security.jwt.token.provider;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jws;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
 import org.emaginalabs.security.jwt.token.model.JwtToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -26,9 +26,9 @@ public interface TokenProvider {
      * Checks whether token is valid
      *
      * @param token token to be checked
-     * @return Jws<Claims> p null is no valid
+     * @return SignedJWT p null is no valid
      */
-    Jws<Claims> validateToken(final String token);
+    SignedJWT validateToken(final String token);
 
     /**
      * Extract authentication from token
@@ -44,7 +44,7 @@ public interface TokenProvider {
      * @param claims claims
      * @return String with username
      */
-    String parseUsername(final Jws<Claims> claims);
+    String parseUsername(final JWTClaimsSet claims);
 
     /**
      * Get roles from token
@@ -52,7 +52,7 @@ public interface TokenProvider {
      * @param claims claims
      * @return List with roles of type {@link GrantedAuthority}
      */
-    List<GrantedAuthority> parseRoles(final Jws<Claims> claims);
+    List<GrantedAuthority> parseRoles(final JWTClaimsSet claims);
 
     /**
      * Get all claims from token
@@ -60,13 +60,7 @@ public interface TokenProvider {
      * @param token token
      * @return all claims
      */
-    Jws<Claims> getJwtClaims(String token);
+    JWTClaimsSet getJwtClaims(String token);
 
-    /**
-     * Get body of token
-     *
-     * @param claims claims
-     * @return Info body token {@link Claims}
-     */
-    Claims parseBody(final Jws<Claims> claims);
+
 }

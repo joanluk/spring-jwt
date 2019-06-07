@@ -1,10 +1,10 @@
-package org.emaginalabs.security.jwt;
+package org.emaginalabs.security.jwt.config;
 
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.emaginalabs.security.jwt.config.JwtSettings;
-import org.emaginalabs.security.jwt.config.SkipPathRequestMatcher;
+import org.emaginalabs.security.jwt.JwtAuthenticationEntryPoint;
 import org.emaginalabs.security.jwt.filter.JwtLoginProcessingFilter;
 import org.emaginalabs.security.jwt.filter.JwtTokenAuthenticationProcessingFilter;
 import org.emaginalabs.security.jwt.token.provider.TokenProvider;
@@ -33,14 +33,7 @@ import java.util.List;
 public class JwtWebSecurityConfigurer implements ApplicationContextAware {
 
     private static final String COMMA_SEPARATOR = ",";
-    private static final String DEFAULT_PATH_SECURE = "/**";
-    private static final String DEFAULT_PATH_LOGIN = "/login";
-    private static final String GAIA_ENV_SECURITY_JWT_PATH_LOGIN = "gaia.env.security.jwt.path.login";
-    private static final String APP_ENV_SECURITY_JWT_PATH_LOGIN = "app.env.security.jwt.path.login";
-    private static final String APP_ENV_SECURITY_JQT_PATH_SECURE = "app.env.security.jqt.path.secure";
-    private static final String GAIA_ENV_SECURITY_JWT_PATH_SECURE = "gaia.env.security.jwt.path.secure";
-    private static final String GAIA_ENV_SECURITY_JWT_PATHS_ALLOW = "gaia.env.security.jwt.paths.allow";
-    private static final String APP_ENV_SECURITY_JWT_PATHS_ALLOW = "app.env.security.jwt.paths.allow";
+
 
     @Autowired
     private AuthenticationManagerBuilder authenticationManager;
@@ -49,6 +42,7 @@ public class JwtWebSecurityConfigurer implements ApplicationContextAware {
 
     private final TokenProvider jwtTokenProvider;
 
+    @Getter
     private final JwtSettings jwtSettings;
 
     private ApplicationContext context;
@@ -56,12 +50,12 @@ public class JwtWebSecurityConfigurer implements ApplicationContextAware {
     private final AuthenticationProvider jwtAuthenticationProvider;
 
 
-    private JwtLoginProcessingFilter buildJwtLoginProcessingFilter(String loginEntryPoint) {
+    protected JwtLoginProcessingFilter buildJwtLoginProcessingFilter(String loginEntryPoint) {
         log.debug("Configuring JwtLoginProcessingFilter...");
         return new JwtLoginProcessingFilter(loginEntryPoint, authenticationManager.getObject(), jwtTokenProvider, jwtSettings);
     }
 
-    private JwtTokenAuthenticationProcessingFilter buildJwtTokenAuthenticationProcessingFilter(List<String> pathsToSkip, String pattern) {
+    protected JwtTokenAuthenticationProcessingFilter buildJwtTokenAuthenticationProcessingFilter(List<String> pathsToSkip, String pattern) {
         log.debug("Configuring JwtTokenAuthenticationProcessingFilter...");
         SkipPathRequestMatcher matcher = new SkipPathRequestMatcher(pathsToSkip, pattern);
         JwtTokenAuthenticationProcessingFilter filter

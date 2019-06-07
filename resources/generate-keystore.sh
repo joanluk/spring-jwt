@@ -2,12 +2,12 @@
 
 set -e
 
-TARGET_FILE="sample-jwt.p12"
-TARGET_FILE_CERT="sample-jwt.cer"
+TARGET_FILE="sample-jwe.p12"
+TARGET_FILE_CERT="sample-jwe.cer"
 TARGET_PWD="changeit"
-TARGET_ALIAS="sample-jwt"
+TARGET_ALIAS="sample-jwe"
 KEY_SIZE="2048"
-KEY_ALG="SHA256withRSA"
+KEY_ALG="SHA256withRSAEncryption"
 
 if [ -f $TARGET_FILE ] ; then
   rm $TARGET_FILE
@@ -20,7 +20,7 @@ keytool -keystore $TARGET_FILE \
         -keyalg RSA -keysize $KEY_SIZE -sigalg $KEY_ALG \
         -storepass $TARGET_PWD \
         -keypass $TARGET_PWD \
-        -dname 'CN=sample-jwt, OU=joanluk, O=labcabrera, L=Madrid, ST=Madrid, C=ES' \
+        -dname 'CN=sample-jwt, OU=joanluk, O=joanluk, L=Madrid, ST=Madrid, C=ES' \
         -genkey -alias $TARGET_ALIAS \
         -storetype pkcs12
 

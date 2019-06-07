@@ -1,7 +1,7 @@
 package org.emaginalabs.security.jwt.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.jsonwebtoken.JwtException;
+import com.nimbusds.jwt.proc.BadJWTException;
 import org.emaginalabs.security.jwt.exceptions.JwtExpiredTokenException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -37,16 +37,16 @@ public class JwtAuthenticationFailureHandler implements AuthenticationFailureHan
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 
         if (e.getClass().isAssignableFrom(BadCredentialsException.class)) {
-            JwtException exception = new JwtException(e.getLocalizedMessage(), e);
+            BadJWTException exception = new BadJWTException(e.getLocalizedMessage(), e);
 
             mapper.writeValue(response.getWriter(), exception);
         } else if (e.getClass().isAssignableFrom(JwtExpiredTokenException.class)) {
 
-            JwtException exception = new JwtException("Token has expired", e);
+            BadJWTException exception = new BadJWTException("Authentication failed : " + e.getMessage(), e);
             mapper.writeValue(response.getWriter(), exception);
 
         } else {
-            JwtException exception = new JwtException("Authentication failed", e);
+            BadJWTException exception = new BadJWTException("Authentication failed: " + e.getMessage(), e);
             mapper.writeValue(response.getWriter(), exception);
         }
     }

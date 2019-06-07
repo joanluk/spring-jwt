@@ -30,6 +30,6 @@ Para el ejemplo se han utilizado algoritmos tanto simétricos como asímetricos.
 - ECDSA usando P-512 and SHA-512  (ES512)
 
 Aunque realmente se podrían ampliar para permitir cualquier tipo de algoritmo con poco esfuerzo. El hecho de haber seleccionado estos es debido
-a que son los más utilziados.
+a que son los más utiliziados.
 
 

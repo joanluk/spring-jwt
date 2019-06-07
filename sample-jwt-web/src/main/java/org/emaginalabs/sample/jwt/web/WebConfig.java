@@ -1,6 +1,7 @@
 package org.emaginalabs.sample.jwt.web;
 
 import lombok.extern.slf4j.Slf4j;
+import org.emaginalabs.security.jwt.claims.DefaultClaim;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -48,6 +49,19 @@ public class WebConfig implements WebMvcConfigurer {
     @Bean
     BCryptPasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    DefaultClaim customClaims() {
+        DefaultClaim defaultClaim = new DefaultClaim();
+        defaultClaim.put("claim1", "value-claims1");
+        defaultClaim.put("claim2", "value-claims2");
+        defaultClaim.put("claim3", "value-claims3");
+        defaultClaim.put("claim4", "value-claims4");
+        defaultClaim.put("claim5", "value-claims5");
+        return defaultClaim;
+
+
     }
 
 }

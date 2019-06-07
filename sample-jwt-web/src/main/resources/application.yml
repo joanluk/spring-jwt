@@ -25,6 +25,8 @@ app:
         issuer: user
         sign:
           key: ThisIsASecret
+        encryptation:
+          key: ThisIsASecret
         refresh:
           time: 16
         compresion: false
@@ -35,7 +37,13 @@ app:
       paths:
         allow: "/api/auth/refresh"
       signature:
-        algorithm: "ES512"
+        algorithm: "RS512"
+      encryptation:
+        active: true
+        algorithm: "RS512"
+
 logging:
   level:
     root: info
+server:
+  port: 8081

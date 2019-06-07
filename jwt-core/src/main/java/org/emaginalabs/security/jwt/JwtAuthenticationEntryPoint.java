@@ -1,7 +1,7 @@
 package org.emaginalabs.security.jwt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.jsonwebtoken.JwtException;
+import com.nimbusds.jwt.proc.BadJWTException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.AuthenticationException;
@@ -34,6 +34,6 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint, Se
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 
         mapper.writeValue(response.getWriter(),
-                new JwtException("Access denied", authException));
+                new BadJWTException("Access denied", authException));
     }
 }

@@ -1,7 +1,7 @@
 package org.emaginalabs.security.jwt.token.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import io.jsonwebtoken.Claims;
+import com.nimbusds.jwt.JWTClaimsSet;
 
 /**
  * Raw representation of JWT Token.
@@ -10,9 +10,9 @@ public final class AccessJwtToken implements JwtToken {
 
     private final String rawToken;
     @JsonIgnore
-    private final Claims claims;
+    private final JWTClaimsSet claims;
 
-    public AccessJwtToken(final String token, Claims claims) {
+    public AccessJwtToken(final String token, JWTClaimsSet claims) {
         this.rawToken = token;
         this.claims = claims;
     }
@@ -21,7 +21,7 @@ public final class AccessJwtToken implements JwtToken {
         return this.rawToken;
     }
 
-    public Claims getClaims() {
+    public JWTClaimsSet getClaims() {
         return claims;
     }
 }

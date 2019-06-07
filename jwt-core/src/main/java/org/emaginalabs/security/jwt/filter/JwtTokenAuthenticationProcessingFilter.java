@@ -31,7 +31,7 @@ public class JwtTokenAuthenticationProcessingFilter extends AbstractAuthenticati
     }
 
     @Override
-    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) {
+    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) throws AuthenticationException {
         String tokenPayload = request.getHeader(JwtTokenProvider.AUTHENTICATION_HEADER_NAME);
         return getAuthenticationManager().authenticate(new JwtTokenAuthentication(tokenPayload));
     }
@@ -41,6 +41,7 @@ public class JwtTokenAuthenticationProcessingFilter extends AbstractAuthenticati
                                             Authentication authResult) throws IOException, ServletException {
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authResult);
+
         SecurityContextHolder.setContext(context);
         chain.doFilter(request, response);
     }
