@@ -7,6 +7,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Class extend {@link Map} to store claims for token JWT
+ *
+ * @author Arquitectura
+ * @since 1.0
+ */
 public class JwtMap implements Map<String, Object> {
 
     private final Map<String, Object> map;

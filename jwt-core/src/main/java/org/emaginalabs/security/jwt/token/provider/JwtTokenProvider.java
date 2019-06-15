@@ -28,6 +28,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
 
 import javax.annotation.PostConstruct;
 import java.io.InputStream;
@@ -42,6 +43,9 @@ import java.util.Map;
 /**
  * Class that manipulates with Json Web Tokens
  * Responsible for generating and parsing tokens jwt. also offers utilities on information to recover from a token
+ *
+ * @author Arquitectura
+ * @since 1.0
  */
 
 @Slf4j
@@ -75,24 +79,10 @@ public class JwtTokenProvider implements TokenProvider {
     public JwtToken createToken(final Authentication authentication) {
         Assert.hasText(authentication.getName(), "Cannot create JWT Token without username");
 
-        //TODO ver si se define clase encargada de dar la fecha
-        LocalDateTime currentTime = LocalDateTime.now();
 
-        JWTClaimsSet.Builder jwtClaimsSet = new JWTClaimsSet.Builder()
-                .issuer(appName)
-                .subject(authentication.getName())
-                .issueTime(currentTime.toDate())
-                .expirationTime(currentTime.plusMinutes(settings.getRefreshTokenExpTime()).toDate())
-                .claim(ROLE_CLAIMS, getAuthoritiesStr((List<GrantedAuthority>) authentication.getAuthorities()))
-                .claim("custom-claims", "test");
+        JWTClaimsSet.Builder jwtClaimsSet = builderJwtToken(authentication);
 
-        if (customClaims != null) {
-            log.debug("including custom claims defined by the bean {0}", customClaims.getClass().getName());
-            for (Map.Entry<String, Object> entry : customClaims.entrySet()) {
-                jwtClaimsSet.claim(entry.getKey(), entry.getValue());
-            }
 
-        }
         SignedJWT signedJWT = new SignedJWT(new JWSHeader(settings.getSignatureAlgorithm()), jwtClaimsSet.build());
         try {
             //Determinate signed algorithm
@@ -128,7 +118,40 @@ public class JwtTokenProvider implements TokenProvider {
     }
 
 
-    public SignedJWT validateToken(String token) {
+    @Override
+    public boolean validateToken(String token) {
+        SignedJWT signedJWT = obtainValidateToken(token);
+        return signedJWT != null;
+    }
+
+    private JWTClaimsSet.Builder builderJwtToken(Authentication authentication) {
+
+        //TODO ver si se define clase encargada de dar la fecha
+        LocalDateTime currentTime = LocalDateTime.now();
+
+        JWTClaimsSet.Builder jwtClaimsSet = new JWTClaimsSet.Builder()
+                .issuer(appName)
+                //principal username
+                .subject(authentication.getName())
+                //issue time generate
+                .issueTime(currentTime.toDate())
+                //expiration time
+                .expirationTime(currentTime.plusMinutes(settings.getRefreshTokenExpTime()).toDate())
+                //authorities
+                .claim(settings.getAuthoritiesClaim(), getAuthoritiesStr((List<GrantedAuthority>) authentication.getAuthorities()));
+
+        if (customClaims != null) {
+            log.debug("including custom claims defined by the bean {}", customClaims.getClass().getName());
+            for (Map.Entry<String, Object> entry : customClaims.entrySet()) {
+                jwtClaimsSet.claim(entry.getKey(), entry.getValue());
+            }
+
+        }
+        return jwtClaimsSet;
+    }
+
+
+    private SignedJWT obtainValidateToken(String token) {
         try {
             SignedJWT signedJWT;
             if (settings.isEncryptation()) {
@@ -174,13 +197,12 @@ public class JwtTokenProvider implements TokenProvider {
     public Authentication getAuthentication(String token) {
 
         if (token != null && token.startsWith(JwtTokenProvider.TOKEN_PREFIX)) {
-            SignedJWT signedJWT = validateToken(token);
+            SignedJWT signedJWT = obtainValidateToken(token);
             try {
                 String user = parseUsername(signedJWT.getJWTClaimsSet());
                 List<GrantedAuthority> authorities = parseRoles(signedJWT.getJWTClaimsSet());
                 UserDetails userDetails = createUser2Token(signedJWT.getJWTClaimsSet());
 
-                //TODO si se han incluido algunos otros claims no se setean en el objeto de seguridad
                 if (user != null) {
                     return new UsernamePasswordAuthenticationToken(userDetails, null, authorities);
                 }
@@ -192,6 +214,12 @@ public class JwtTokenProvider implements TokenProvider {
         return null;
     }
 
+    /**
+     * Create Spring {{@link UserDetails}} from jwt token
+     *
+     * @param jwtClaimsSet jwt claims set
+     * @return {{@link UserDetails}} object
+     */
     private UserDetails createUser2Token(JWTClaimsSet jwtClaimsSet) {
 
         JwtUserDetailsImpl.Essence user = new JwtUserDetailsImpl.Essence();
@@ -202,25 +230,36 @@ public class JwtTokenProvider implements TokenProvider {
     }
 
     /**
-     * Parse a token and extract the subject (username).
+     * Parse a token and extract the subject (username) or config property 'app.security.jwt.claims.username'.
      *
      * @param claims claims jwt.
      * @return The subject (username) of the token.
      */
-    public String parseUsername(JWTClaimsSet claims) {
-
-        return claims
-                .getSubject();
-
+    private String parseUsername(JWTClaimsSet claims) {
+        if (StringUtils.isEmpty(settings.getUsernameClaim())) {
+            return claims
+                    .getSubject();
+        }
+        try {
+            return claims.getStringClaim(settings.getUsernameClaim());
+        } catch (ParseException e) {
+            return null;
+        }
     }
 
 
     @SuppressWarnings("unchecked")
-    public List<GrantedAuthority> parseRoles(JWTClaimsSet claims) {
+    /**
+     * Parse token and extract authorities claims with property 'app.security.jwt.claims.authorities' or authorities default claim
+     *
+     * @param claims claims jwt.
+     * @return List  authorities
+     */
+    private List<GrantedAuthority> parseRoles(JWTClaimsSet claims) {
 
         List<GrantedAuthority> authorities = new ArrayList<GrantedAuthority>();
         List<String> roles = (List<String>) claims
-                .getClaim((ROLE_CLAIMS));
+                .getClaim((settings.getAuthoritiesClaim()));
 
         for (String role : roles) {
             authorities.add(new SimpleGrantedAuthority(role));
@@ -249,18 +288,6 @@ public class JwtTokenProvider implements TokenProvider {
         }
 
         return null;
-    }
-
-    /**
-     * Return private claim with name defined in claim property
-     *
-     * @param claim name claim to obtain
-     * @param token token
-     * @return info of claim
-     */
-    public Object parseCustomClaim(final String token, final String claim) {
-        return getJwtClaims(token)
-                .getClaim(claim);
     }
 
 

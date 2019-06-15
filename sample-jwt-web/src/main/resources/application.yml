@@ -39,9 +39,10 @@ app:
       signature:
         algorithm: "RS512"
       encryptation:
-        active: true
+        active: false
         algorithm: "RS512"
-
+      login:
+        enabled: true
 logging:
   level:
     root: info

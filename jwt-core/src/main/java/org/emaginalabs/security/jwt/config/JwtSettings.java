@@ -53,7 +53,6 @@ public class JwtSettings {
     @Value("${app.security.jwt.encryptation.algorithm}")
     private String encryptationAlgorithmStr;
 
-
     @Value("${app.security.jwt.encryptation.active:false}")
     private boolean encryptation;
 
@@ -68,6 +67,12 @@ public class JwtSettings {
 
     @Value("${app.security.jwt.login.enabled:false}")
     private boolean apiLoginEnabled;
+
+    @Value("${app.security.jwt.claims.username:subject}")
+    private String usernameClaim;
+
+    @Value("${app.security.jwt.claims.authorities:authorities}")
+    private String authoritiesClaim;
 
     public JWSAlgorithm getSignatureAlgorithm() {
         return JWSAlgorithm.parse(signatureAlgorithmStr);

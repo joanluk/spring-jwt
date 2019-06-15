@@ -13,10 +13,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+
 /**
- * User: jose
- * Date: 2019-05-30
- * Time: 10:50
+ * Security configurer for JWT
+ *
+ * @author Arquitectura
  */
 
 @Slf4j
